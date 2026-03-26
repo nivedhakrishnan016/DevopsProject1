@@ -1,117 +1,91 @@
-// JENKINS CI PIPELINE/
-// Purpose: The Code will be built into executable file (.jar) & pushed to Dockerhub
-// NOTE:
-//  i. Store Dockerhub, EC2 pem key credentials in Jenkins Server
-// ii. Install 'ssh agent' plugin in Jenkins
-
 pipeline {
     agent any
-    // DECLARE THE VARIABLES HERE:
+
     environment {
-        DOCKER_USERNAME = "hub_creds"     // check the 'ID' in your Jenkins credentials
+        DOCKER_USERNAME = "nivedha16"
     }
 
     stages {
+
         stage("1. Cleanup") {
-            // Clean workspace directory for the current build
             steps {
-                deleteDir ()             
+                deleteDir()
             }
         }
 
-        stage ('2. Git Checkout') {
-            // use pipeline syntax generator to generate below step
-            // 'Pipeline syntax' --> Steps 'Smaple step' --> git (enter url & branch & generate)
+        stage('2. Git Checkout') {
             steps {
-                dir ("DevopsProject1/DevopsProject1-main"){
-                  script {
-                    git branch: 'main', url: 'https://github.com/nivedhakrishnan016/DevopsProject1.git' 
-                  }
-                }
+                sh "git clone https://github.com/nivedhakrishnan016/DevopsProject1.git"
             }
-        }   
-        
-        stage("3. Maven Unit Test") {  
-            // Test the individual units of code 
-            steps{
-                dir ("DevopsProject1/DevopsProject1-main"){
-                  sh 'mvn test'        
+        }
+
+        stage("3. Maven Unit Test") {
+            steps {
+                dir("DevopsProject1") {
+                    sh 'which mvn'
+                    sh 'mvn -v'
+                    sh 'mvn test'
                 }
             }
         }
 
         stage('4. Maven Build') {
-            // Build the application into an executable file (.jar)
-            steps{
-                dir ("DevopsProject1/DevopsProject1-main"){
-                  sh 'mvn clean install'   
+            steps {
+                dir("DevopsProject1") {
+                    sh 'mvn clean install'
                 }
             }
         }
 
         stage("5. Maven Integration Test") {
-            //  Test the interaction between different units of code
-            steps{
-                dir ("DevopsProject1/DevopsProject1-main"){
-                  sh 'mvn verify'          
+            steps {
+                dir("DevopsProject1") {
+                    sh 'mvn verify'
                 }
             }
         }
 
         stage('6. Docker Image Build') {
-            // Build Docker Image 
-            steps{
-                dir('DevopsProject1/DevopsProject1-main') {      // go to directory where 'Dockerfile' is stored
+            steps {
+                dir('DevopsProject1') {
                     script {
-                      def JOB = env.JOB_NAME.toLowerCase()           // Convert Jenkins Job name to lower-case
-                      sh "docker build -t ${JOB}:${BUILD_NUMBER} ."  // 'JOB_NAME' & 'BUILD_NUMBER' are Jenkins Global variable
+                        def JOB = env.JOB_NAME.toLowerCase()
+                        sh "docker build -t ${JOB}:${BUILD_NUMBER} ."
                     }
                 }
             }
         }
-        
+
         stage('7. Docker Image Tag') {
-            // Rename the Docker Image before pushing to Dockerhub
-            steps{
-                dir('DevopsProject1/DevopsProject1-main') {      // go to directory where Docker Image is created
-                  script {
-                    def JOB = env.JOB_NAME.toLowerCase() // Convert Jenkins Job name to lower-case
-                    sh "docker tag ${JOB}:${BUILD_NUMBER} ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER}"
-                    sh "docker tag ${JOB}:${BUILD_NUMBER} ${DOCKER_USERNAME}/${JOB}:latest"
-                  }
+            steps {
+                dir('DevopsProject1') {
+                    script {
+                        def JOB = env.JOB_NAME.toLowerCase()
+                        sh "docker tag ${JOB}:${BUILD_NUMBER} ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER}"
+                        sh "docker tag ${JOB}:${BUILD_NUMBER} ${DOCKER_USERNAME}/${JOB}:latest"
+                    }
                 }
-            } 
+            }
         }
 
         stage('8. Trivy Image Scan') {
-            // Scan Docker images for vulnerabilities 
-            steps{
-                script { 
-                  def JOB = env.JOB_NAME.toLowerCase() // Convert Jenkins Job name to lower-case
-                  sh "trivy image ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER} > scan.txt"
+            steps {
+                script {
+                    def JOB = env.JOB_NAME.toLowerCase()
+                    sh "trivy image ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER} > scan.txt"
                 }
             }
         }
 
         stage('9. Docker Image Push') {
-            // Login to Dockerhub & Push the image to Dockerhub
-            steps{
-                script { 
-                  withCredentials([usernamePassword(credentialsId: 'my_dockerhub_creds', usernameVariable: 'docker_user', passwordVariable: 'docker_pass')]) {
-                    sh "docker login -u '${docker_user}' -p '${docker_pass}'"
-                    def JOB = env.JOB_NAME.toLowerCase() // Convert Jenkins Job name to lower-case
-                    sh "docker push ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER}"
-                    sh "docker push ${DOCKER_USERNAME}/${JOB}:latest"
-                  }
-                }
-            }
-        }
-
-        stage('10. Docker Image Cleanup') {
-            // Remove the unwanted (dangling) images created in Jenkins Server to free-up space
-            steps{
-                script { 
-                  sh "docker image prune -af"
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'hub_creds', usernameVariable: 'docker_user', passwordVariable: 'docker_pass')]) {
+                        sh "docker login -u '${docker_user}' -p '${docker_pass}'"
+                        def JOB = env.JOB_NAME.toLowerCase()
+                        sh "docker push ${DOCKER_USERNAME}/${JOB}:v${BUILD_NUMBER}"
+                        sh "docker push ${DOCKER_USERNAME}/${JOB}:latest"
+                    }
                 }
             }
         }
