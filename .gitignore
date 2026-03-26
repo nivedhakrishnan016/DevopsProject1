@@ -1,2 +1,8 @@
 terraform_files
 .test
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.pem
+*.ppk
