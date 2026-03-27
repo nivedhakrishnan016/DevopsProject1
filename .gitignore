@@ -1,6 +1,5 @@
-terraform_files
-.test
 # Terraform
+.test
 .terraform/
 *.tfstate
 *.tfstate.*
